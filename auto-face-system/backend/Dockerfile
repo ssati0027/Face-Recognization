@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.10
 
 WORKDIR /app
 
@@ -20,29 +20,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install numpy FIRST (required by everything)
+# Install in specific order
 RUN pip install --no-cache-dir numpy==1.24.3
-
-# Install onnxruntime and VERIFY IT
-RUN pip install --no-cache-dir onnxruntime==1.16.3 && \
-    python -c "import onnxruntime; print('onnxruntime OK:', onnxruntime.__version__)"
-
-# Install opencv and scipy
+RUN pip install --no-cache-dir onnxruntime==1.16.3
 RUN pip install --no-cache-dir opencv-python-headless==4.8.1.78
 RUN pip install --no-cache-dir scipy==1.11.4
 RUN pip install --no-cache-dir Pillow==10.1.0
 
-# Install insightface WITHOUT dependencies (to avoid overwriting onnxruntime)
-RUN pip install --no-cache-dir --no-deps insightface==0.7.3
-
-# Install missing insightface dependencies manually
-RUN pip install --no-cache-dir \
-    tqdm \
-    requests \
-    matplotlib \
-    Cython \
-    albumentations \
-    easydict
+# Install insightface
+RUN pip install --no-cache-dir insightface==0.7.3
 
 # Install FastAPI stack
 RUN pip install --no-cache-dir \
@@ -52,9 +38,6 @@ RUN pip install --no-cache-dir \
     pydantic==2.5.0 \
     pydantic-settings==2.1.0 \
     python-dotenv==1.0.0
-
-# VERIFY onnxruntime is still there after all installations
-RUN python -c "import onnxruntime; print('Final check - onnxruntime:', onnxruntime.__version__)"
 
 # Copy application
 COPY main.py .

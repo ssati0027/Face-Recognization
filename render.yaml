@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: face-recognition-api
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: auto-face-system/backend
+    buildCommand: |
+      pip install --upgrade pip setuptools wheel
+      pip install numpy==1.24.3
+      pip install onnxruntime==1.14.1
+      pip install opencv-python-headless==4.8.1.78
+      pip install scipy==1.11.4
+      pip install Pillow==10.1.0
+      pip install insightface==0.7.3
+      pip install fastapi==0.104.1
+      pip install uvicorn==0.24.0
+      pip install python-multipart==0.0.6
+      pip install pydantic==2.5.0
+      pip install pydantic-settings==2.1.0
+      pip install python-dotenv==1.0.0
+    startCommand: python main.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: PORT
+        value: 8000
+      - key: GPU_ENABLED
+        value: false

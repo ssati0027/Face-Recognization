@@ -1,16 +1,19 @@
-# This file is now mainly for reference
-# Actual installation is done in Dockerfile in specific order
-
+numpy==1.24.3
+onnxruntime==1.14.1
+opencv-python-headless==4.8.1.78
+scipy==1.11.4
+Pillow==10.1.0
+insightface==0.7.3
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
 pydantic==2.5.0
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
+```
 
-numpy==1.24.3
-onnxruntime==1.16.3
-opencv-python-headless==4.8.1.78
-scipy==1.11.4
-insightface==0.7.3
-Pillow==10.1.0
+### Then in Render Settings:
+```
+Language: Docker
+Root Directory: auto-face-system/backend
+Dockerfile Path: ./Dockerfile

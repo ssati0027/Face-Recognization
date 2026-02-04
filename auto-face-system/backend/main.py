@@ -160,7 +160,7 @@ def generate_person_id():
     return f"PERSON_{timestamp}_{unique}"
 
 def check_face_quality(face, frame):
-    """Check if face meets minimum quality standards"""
+    """Check if face meets minimum quality standards + eyes/mask detection"""
     try:
         x1, y1, x2, y2 = map(int, face.bbox)
         h, w = frame.shape[:2]
@@ -176,7 +176,7 @@ def check_face_quality(face, frame):
         
         # Check size
         if face_w < MIN_FACE_SIZE or face_h < MIN_FACE_SIZE:
-            return False, "Too small"
+            return False, "Face too small"
         
         # Check blur
         crop = frame[y1:y2, x1:x2]
@@ -187,12 +187,168 @@ def check_face_quality(face, frame):
         blur = cv2.Laplacian(gray, cv2.CV_64F).var()
         
         if blur < MIN_FACE_QUALITY:
-            return False, "Too blurry"
+            return False, "Face too blurry"
+        
+        # ========== NEW: Check for landmarks ==========
+        if not hasattr(face, 'kps') or face.kps is None or len(face.kps) < 5:
+            return False, "No facial landmarks detected"
+        
+        kps = np.array(face.kps)
+        
+        # Convert to crop-relative coordinates
+        left_eye = kps[0] - [x1, y1]
+        right_eye = kps[1] - [x1, y1]
+        nose = kps[2] - [x1, y1]
+        left_mouth = kps[3] - [x1, y1]
+        right_mouth = kps[4] - [x1, y1]
+        
+        # ========== NEW: EYES CLOSED DETECTION ==========
+        eyes_closed = detect_eyes_closed(gray, left_eye, right_eye)
+        if eyes_closed:
+            return False, "Eyes closed - please open eyes"
+        
+        # ========== NEW: MASK DETECTION ==========
+        mask_detected = detect_mask(gray, nose, left_mouth, right_mouth, face_h)
+        if mask_detected:
+            return False, "Mask detected - please remove mask"
         
         return True, None
         
     except Exception as e:
         return False, str(e)
+
+
+def detect_eyes_closed(gray, left_eye, right_eye):
+    """
+    Detect if eyes are closed using variance and brightness analysis
+    Closed eyes: low variance (smooth eyelid), darker, less edges
+    Open eyes: high variance (iris/pupil/sclera), brighter, clear edges
+    """
+    try:
+        eye_size = 16  # Focused region around eye
+        
+        def get_eye_patch(eye_pt):
+            cx, cy = int(eye_pt[0]), int(eye_pt[1])
+            x1 = max(0, cx - eye_size)
+            x2 = min(gray.shape[1], cx + eye_size)
+            y1 = max(0, cy - eye_size)
+            y2 = min(gray.shape[0], cy + eye_size)
+            return gray[y1:y2, x1:x2]
+        
+        left_patch = get_eye_patch(left_eye)
+        right_patch = get_eye_patch(right_eye)
+        
+        if left_patch.size == 0 or right_patch.size == 0:
+            return True  # Cannot validate = reject
+        
+        # Method 1: Variance Check
+        # Open eyes have high variance (iris, sclera, pupil contrast)
+        # Closed eyes are smooth (just eyelid skin)
+        left_var = np.var(left_patch)
+        right_var = np.var(right_patch)
+        
+        VARIANCE_THRESHOLD = 100  # Adjust: lower=stricter, higher=lenient
+        
+        if left_var < VARIANCE_THRESHOLD or right_var < VARIANCE_THRESHOLD:
+            return True  # Eyes closed
+        
+        # Method 2: Brightness Peak Check
+        # Open eyes have bright spots (sclera/reflection)
+        left_max = np.max(left_patch)
+        right_max = np.max(right_patch)
+        left_mean = np.mean(left_patch)
+        right_mean = np.mean(right_patch)
+        
+        left_peak_ratio = left_max / (left_mean + 1e-5)
+        right_peak_ratio = right_max / (right_mean + 1e-5)
+        
+        PEAK_THRESHOLD = 1.3
+        
+        if left_peak_ratio < PEAK_THRESHOLD or right_peak_ratio < PEAK_THRESHOLD:
+            return True  # Eyes closed
+        
+        # Method 3: Edge Density
+        # Open eyes have clear vertical edges (eyelid boundaries)
+        left_edges = cv2.Canny(left_patch, 30, 100)
+        right_edges = cv2.Canny(right_patch, 30, 100)
+        
+        left_edge_density = np.sum(left_edges > 0) / (left_patch.size + 1e-5)
+        right_edge_density = np.sum(right_edges > 0) / (right_patch.size + 1e-5)
+        
+        EDGE_THRESHOLD = 0.04
+        
+        if left_edge_density < EDGE_THRESHOLD or right_edge_density < EDGE_THRESHOLD:
+            return True  # Eyes closed
+        
+        # All checks passed = eyes are open
+        return False
+        
+    except Exception as e:
+        print(f"Eyes closed detection error: {e}")
+        return True  # On error, reject
+
+
+def detect_mask(gray, nose, left_mouth, right_mouth, face_h):
+    """
+    Detect face mask by analyzing lower face region
+    Mask creates: uniform texture, brightness drop, smooth surface
+    """
+    try:
+        nose_y = int(nose[1])
+        mouth_center_y = int((left_mouth[1] + right_mouth[1]) / 2)
+        mouth_center_x = int((left_mouth[0] + right_mouth[0]) / 2)
+        
+        # Safety bounds
+        if nose_y < 0 or mouth_center_y >= gray.shape[0]:
+            return False
+        
+        # Extract mouth region (should show skin texture if no mask)
+        mouth_width = int(abs(right_mouth[0] - left_mouth[0]) * 1.5)
+        mouth_height = int(abs(mouth_center_y - nose_y) * 0.8)
+        
+        mx1 = max(0, mouth_center_x - mouth_width // 2)
+        mx2 = min(gray.shape[1], mouth_center_x + mouth_width // 2)
+        my1 = max(0, mouth_center_y - mouth_height // 2)
+        my2 = min(gray.shape[0], mouth_center_y + mouth_height // 2)
+        
+        mouth_region = gray[my1:my2, mx1:mx2]
+        
+        if mouth_region.size == 0:
+            return False
+        
+        # Mask indicators:
+        # 1. Low variance (uniform fabric texture)
+        mouth_variance = np.var(mouth_region)
+        
+        # 2. Check brightness compared to upper face
+        upper_y1 = max(0, nose_y - mouth_height)
+        upper_region = gray[upper_y1:nose_y, mx1:mx2]
+        
+        if upper_region.size == 0:
+            return False
+        
+        mouth_brightness = np.mean(mouth_region)
+        upper_brightness = np.mean(upper_region)
+        brightness_ratio = mouth_brightness / (upper_brightness + 1e-5)
+        
+        # Mask detection thresholds
+        # Masks typically show: low variance + similar/darker than upper face
+        if mouth_variance < 120 and brightness_ratio < 1.15:
+            return True  # Mask detected
+        
+        # Additional check: Edge strength (fabric pattern)
+        edges = cv2.Canny(mouth_region, 50, 150)
+        edge_density = np.sum(edges > 0) / (mouth_region.size + 1e-5)
+        
+        # Very smooth surface = likely mask
+        if edge_density < 0.02 and mouth_variance < 150:
+            return True  # Mask detected
+        
+        return False  # No mask
+        
+    except Exception as e:
+        print(f"Mask detection error: {e}")
+        return False
 
 def extract_face_image(face, frame):
     """Extract face region from frame with padding"""

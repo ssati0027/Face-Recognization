@@ -2,12 +2,16 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies INCLUDING build tools for InsightFace
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
     wget \
+    build-essential \
+    g++ \
+    gcc \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching

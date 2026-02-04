@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install ALL system dependencies needed
+# Install ALL system dependencies INCLUDING BUILD TOOLS
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     wget \
+    build-essential \
+    g++ \
+    gcc \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip first
@@ -27,7 +31,7 @@ RUN pip install --no-cache-dir opencv-python-headless==4.8.1.78
 RUN pip install --no-cache-dir scipy==1.11.4
 RUN pip install --no-cache-dir Pillow==10.1.0
 
-# Install InsightFace (depends on above packages)
+# Install InsightFace (depends on above packages AND build tools)
 RUN pip install --no-cache-dir insightface==0.7.3
 
 # Install FastAPI and web dependencies

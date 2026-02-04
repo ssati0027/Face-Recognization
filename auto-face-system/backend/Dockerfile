@@ -34,13 +34,13 @@ RUN pip install --no-cache-dir Pillow==10.1.0
 # Install InsightFace (depends on above packages AND build tools)
 RUN pip install --no-cache-dir insightface==0.7.3
 
-# Install FastAPI and web dependencies
+# Install FastAPI with COMPATIBLE pydantic version
 RUN pip install --no-cache-dir \
-    fastapi==0.104.1 \
+    pydantic>=2.9.2 \
+    pydantic-settings>=2.6.0 \
+    fastapi>=0.115.0 \
     uvicorn==0.24.0 \
     python-multipart==0.0.6 \
-    pydantic==2.5.0 \
-    pydantic-settings==2.1.0 \
     python-dotenv==1.0.0
 
 # Copy application
